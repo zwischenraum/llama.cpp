@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Callable, ContextManager, Iterable, Itera
 import math
 import numpy as np
 import torch
+from transformers import PreTrainedTokenizerFast
 
 if TYPE_CHECKING:
     from torch import Tensor
@@ -539,9 +540,6 @@ class Model:
         # NOTE: if you get an error here, you need to update the convert_hf_to_gguf_update.py script
         #       or pull the latest version of the model from Huggingface
         #       don't edit the hashes manually!
-        if chkhsh == "0ef9807a4087ebef797fc749390439009c3b9eda9ad1a097abbe738f486c01e5":
-            # ref: https://huggingface.co/meta-llama/Meta-Llama-3-8B
-            res = "llama-bpe"
         if chkhsh == "049ecf7629871e3041641907f3de7c733e4dbfdc736f57d882ba0b0845599754":
             # ref: https://huggingface.co/deepseek-ai/deepseek-llm-7b-base
             res = "deepseek-llm"
@@ -569,18 +567,12 @@ class Model:
         if chkhsh == "6221ad2852e85ce96f791f476e0b390cf9b474c9e3d1362f53a24a06dc8220ff":
             # ref: https://huggingface.co/smallcloudai/Refact-1_6-base
             res = "refact"
-        if chkhsh == "9c2227e4dd922002fb81bde4fc02b0483ca4f12911410dee2255e4987644e3f8":
-            # ref: https://huggingface.co/CohereForAI/c4ai-command-r-v01
-            res = "command-r"
         if chkhsh == "e636dc30a262dcc0d8c323492e32ae2b70728f4df7dfe9737d9f920a282b8aea":
             # ref: https://huggingface.co/Qwen/Qwen1.5-7B
             res = "qwen2"
         if chkhsh == "b6dc8df998e1cfbdc4eac8243701a65afe638679230920b50d6f17d81c098166":
             # ref: https://huggingface.co/allenai/OLMo-1.7-7B-hf
             res = "olmo"
-        if chkhsh == "a8594e3edff7c29c003940395316294b2c623e09894deebbc65f33f1515df79e":
-            # ref: https://huggingface.co/databricks/dbrx-base
-            res = "dbrx"
         if chkhsh == "0876d13b50744004aa9aeae05e7b0647eac9d801b5ba4668afc01e709c15e19f":
             # ref: https://huggingface.co/jinaai/jina-embeddings-v2-base-en
             res = "jina-v2-en"
@@ -599,21 +591,12 @@ class Model:
         if chkhsh == "7967bfa498ade6b757b064f31e964dddbb80f8f9a4d68d4ba7998fcf281c531a":
             # ref: https://huggingface.co/jinaai/jina-embeddings-v2-base-code
             res = "jina-v2-code"
-        if chkhsh == "b6e8e1518dc4305be2fe39c313ed643381c4da5db34a98f6a04c093f8afbe99b":
-            # ref: https://huggingface.co/THUDM/glm-4-9b-chat
-            res = "chatglm-bpe"
         if chkhsh == "7fc505bd3104ca1083b150b17d088b59534ede9bde81f0dd2090967d7fe52cee":
             # ref: https://huggingface.co/LumiOpen/Viking-7B
             res = "viking"
-        if chkhsh == "b53802fb28e26d645c3a310b34bfe07da813026ec7c7716883404d5e0f8b1901":
-            # ref: https://huggingface.co/core42/jais-13b
-            res = "jais"
         if chkhsh == "7b3e7548e4308f52a76e8229e4e6cc831195d0d1df43aed21ac6c93da05fec5f":
             # ref: https://huggingface.co/WisdomShell/CodeShell-7B
             res = "codeshell"
-        if chkhsh == "63b97e4253352e6f357cc59ea5b583e3a680eaeaf2632188c2b952de2588485e":
-            # ref: https://huggingface.co/mistralai/Mistral-Nemo-Base-2407
-            res = "tekken"
         if chkhsh == "855059429035d75a914d1eda9f10a876752e281a054a7a3d421ef0533e5b6249":
             # ref: https://huggingface.co/HuggingFaceTB/SmolLM-135M
             res = "smollm"
@@ -1487,7 +1470,74 @@ class StableLMModel(Model):
                 raise ValueError(f"Unprocessed norms: {norms}")
 
 
-@Model.register("LlamaForCausalLM", "MistralForCausalLM", "MixtralForCausalLM")
+@Model.register("PhariaForCausalLM")
+class PhariaForCausalLM(Model):
+    model_arch = gguf.MODEL_ARCH.PHARIA
+
+    def set_vocab(self):
+        tokenizer_path = self.dir_model
+
+        if not tokenizer_path.is_dir():
+            raise FileNotFoundError(f"Directory not found: {tokenizer_path}")
+
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
+
+        vocab_size = self.hparams.get('vocab_size')
+
+        # for this kind of tokenizer, added_vocab is not a subset of vocab, so they need to be combined
+        vocab = tokenizer.get_vocab()
+        added_vocab = tokenizer.added_tokens_encoder
+        reverse_vocab = {id_: encoded_tok for encoded_tok, id_ in {**vocab, **added_vocab}.items()}
+
+        tokens = []
+        toktypes = []
+        for i in range(vocab_size):
+            if i not in reverse_vocab:
+                raise ValueError(f"TokenId {i} not in vocab")
+            elif reverse_vocab[i] in added_vocab:
+                tokens.append(reverse_vocab[i])
+                toktypes.append(gguf.TokenType.CONTROL)
+            else:
+                tokens.append(reverse_vocab[i])
+                toktypes.append(gguf.TokenType.NORMAL)
+
+
+        special_vocab = gguf.SpecialVocab(self.dir_model)
+        special_vocab.add_to_gguf(self.gguf_writer)
+
+        self.gguf_writer.add_tokenizer_model("pharia")
+        self.gguf_writer.add_tokenizer_pre("default")
+        self.gguf_writer.add_token_list(tokens)
+        self.gguf_writer.add_token_types(toktypes)
+        self.gguf_writer.add_unk_token_id(2)
+        self.gguf_writer.add_eot_token_id(127182)
+
+        self.gguf_writer.add_add_bos_token(False)
+        self.gguf_writer.add_add_eos_token(True)
+
+
+    def set_gguf_parameters(self):
+        super().set_gguf_parameters()
+        hparams = self.hparams
+        self.gguf_writer.add_vocab_size(hparams["vocab_size"])
+
+        rope_dim = hparams["hidden_size"] // hparams["num_attention_heads"]
+        self.gguf_writer.add_rope_dimension_count(rope_dim)
+
+
+    def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
+        n_head = self.hparams["num_attention_heads"]
+        n_kv_head = self.hparams.get("num_key_value_heads")
+
+        if name.endswith(("q_proj.weight", "q_proj.bias")):
+            data_torch = LlamaModel.permute(data_torch, n_head, n_head)
+        if name.endswith(("k_proj.weight", "k_proj.bias")):
+            data_torch = LlamaModel.permute(data_torch, n_head, n_kv_head)
+
+        return [(self.map_tensor_name(name), data_torch)]
+
+
+@Model.register( "LlamaForCausalLM", "MistralForCausalLM", "MixtralForCausalLM")
 class LlamaModel(Model):
     model_arch = gguf.MODEL_ARCH.LLAMA
 

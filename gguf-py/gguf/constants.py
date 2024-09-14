@@ -186,6 +186,7 @@ class GGUFType:
 
 class MODEL_ARCH(IntEnum):
     LLAMA        = auto()
+    PHARIA       = auto()
     FALCON       = auto()
     BAICHUAN     = auto()
     GROK         = auto()
@@ -340,6 +341,7 @@ class MODEL_TENSOR(IntEnum):
 
 MODEL_ARCH_NAMES: dict[MODEL_ARCH, str] = {
     MODEL_ARCH.LLAMA:          "llama",
+    MODEL_ARCH.PHARIA:         "pharia",
     MODEL_ARCH.FALCON:         "falcon",
     MODEL_ARCH.BAICHUAN:       "baichuan",
     MODEL_ARCH.GROK:           "grok",
@@ -493,6 +495,19 @@ TENSOR_NAMES: dict[MODEL_TENSOR, str] = {
 }
 
 MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
+    MODEL_ARCH.PHARIA: [
+        MODEL_TENSOR.TOKEN_EMBD,
+        MODEL_TENSOR.OUTPUT_NORM,
+        MODEL_TENSOR.OUTPUT,
+        MODEL_TENSOR.ATTN_NORM,
+        MODEL_TENSOR.ATTN_Q,
+        MODEL_TENSOR.ATTN_K,
+        MODEL_TENSOR.ATTN_V,
+        MODEL_TENSOR.ATTN_OUT,
+        MODEL_TENSOR.FFN_NORM,
+        MODEL_TENSOR.FFN_DOWN,
+        MODEL_TENSOR.FFN_UP,
+    ],
     MODEL_ARCH.LLAMA: [
         MODEL_TENSOR.TOKEN_EMBD,
         MODEL_TENSOR.OUTPUT_NORM,
