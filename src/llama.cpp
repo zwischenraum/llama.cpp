@@ -10144,7 +10144,7 @@ struct llm_build_context {
                     NULL,  NULL,   NULL,
                     model.layers[il].ffn_down, model.layers[il].ffn_down_b, NULL,
                     NULL,
-                    LLM_FFN_GELU, LLM_FFN_PAR, cb, il);
+                    LLM_FFN_GELU, LLM_FFN_SEQ, cb, il);
             cb(cur, "ffn_out", il);
 
             cur = ggml_add(ctx0, cur, ffn_inp);
